@@ -1,0 +1,12 @@
+#profiles.yml (copy-paste this — dummy version for testing):
+#YAML
+my_spark_profile:
+  target: dev
+  outputs:
+    dev:
+      type: spark
+      method: thrift
+      host: localhost
+      port: 10000
+      schema: default
+      # For real use later, replace with your Databricks / EMR details

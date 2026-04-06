@@ -1,0 +1,18 @@
+[0m21:10:25.930758 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x79cb5904aae0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x79cb5c27d280>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x79cb59b27170>]}
+
+
+============================== 21:10:25.941395 | a6ab9361-b4cc-41bd-b8e2-79e9581c149c ==============================
+[0m21:10:25.941395 [info ] [MainThread]: Running with dbt=1.8.0
+[0m21:10:25.942389 [debug] [MainThread]: running dbt with arguments {'printer_width': '80', 'indirect_selection': 'eager', 'log_cache_events': 'False', 'write_json': 'True', 'partial_parse': 'True', 'cache_selected_only': 'False', 'warn_error': 'None', 'version_check': 'True', 'debug': 'False', 'log_path': '/dbt/logs', 'fail_fast': 'False', 'profiles_dir': '/dbt', 'use_colors': 'True', 'use_experimental_parser': 'False', 'no_print': 'None', 'quiet': 'False', 'warn_error_options': 'WarnErrorOptions(include=[], exclude=[])', 'static_parser': 'True', 'invocation_command': 'dbt run', 'log_format': 'default', 'target_path': 'None', 'introspect': 'True', 'send_anonymous_usage_stats': 'True'}
+[0m21:10:26.007418 [debug] [MainThread]: Spark adapter: Setting pyhive.hive logging to ERROR
+[0m21:10:26.007871 [debug] [MainThread]: Spark adapter: Setting thrift.transport logging to ERROR
+[0m21:10:26.008195 [debug] [MainThread]: Spark adapter: Setting thrift.protocol logging to ERROR
+[0m21:10:26.043355 [error] [MainThread]: Encountered an error:
+Runtime Error
+  Credentials in profile "my_spark_profile", target "dev" invalid: Runtime Error
+    thrift connection method requires additional dependencies. 
+    Install the additional required dependencies with `pip install dbt-spark[PyHive]`
+[0m21:10:26.044491 [debug] [MainThread]: Resource report: {"command_name": "run", "command_wall_clock_time": 0.22890604, "process_user_time": 2.125883, "process_kernel_time": 0.142992, "process_mem_max_rss": "102308", "process_out_blocks": "16", "command_success": false, "process_in_blocks": "0"}
+[0m21:10:26.045152 [debug] [MainThread]: Command `dbt run` failed at 21:10:26.044998 after 0.23 seconds
+[0m21:10:26.045583 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x79cb58ff41a0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x79cb58de6f00>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x79cb589a1a90>]}
+[0m21:10:26.045933 [debug] [MainThread]: Flushing usage events

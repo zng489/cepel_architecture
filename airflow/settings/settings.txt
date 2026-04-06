@@ -1,0 +1,3 @@
+asus@asus-VivoBook-S14-X430UN:~$ gsettings set org.gnome.desktop.screensaver lock-enabled false
+asus@asus-VivoBook-S14-X430UN:~$ gsettings set org.gnome.desktop.lockdown disable-lock-screen true
+

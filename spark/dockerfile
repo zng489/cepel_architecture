@@ -1,0 +1,23 @@
+FROM eclipse-temurin:17-jre-alpine
+
+RUN apk add --no-cache bash wget procps tini python3~=3.12 gcompat
+
+ENV SPARK_VERSION=3.5.8
+ENV SPARK_HOME=/opt/spark
+ENV PATH="${SPARK_HOME}/bin:${SPARK_HOME}/sbin:${PATH}"
+ENV PYSPARK_PYTHON=python3
+
+# Spark
+RUN wget https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+    && tar xf spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+    && mv spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
+    && rm spark-${SPARK_VERSION}-bin-hadoop3.tgz
+
+# JARs S3A — versões compatíveis com Hadoop 3.3.6 (Spark 3.5.8)
+RUN wget -q https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
+         -O ${SPARK_HOME}/jars/hadoop-aws-3.3.4.jar && \
+    wget -q https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
+         -O ${SPARK_HOME}/jars/aws-java-sdk-bundle-1.12.262.jar
+
+WORKDIR ${SPARK_HOME}
+ENTRYPOINT ["tini", "--"]

@@ -1,0 +1,485 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements. See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership. The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License. You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+# -----------------------------------------------------------------------
+# Apache Airflow 3.1.8 — Docker Compose (desenvolvimento local)
+# -----------------------------------------------------------------------
+#
+# Variáveis de ambiente suportadas:
+#   AIRFLOW_IMAGE_NAME  – imagem Docker a usar
+#                         Padrão: apache/airflow:3.1.8
+#   AIRFLOW_UID         – UID do usuário nos containers
+#                         Padrão: 50000
+#   _AIRFLOW_WWW_USER_USERNAME – usuário admin  (padrão: airflow)
+#   _AIRFLOW_WWW_USER_PASSWORD – senha admin    (padrão: airflow)
+#   _PIP_ADDITIONAL_REQUIREMENTS – pacotes pip extras a instalar
+#
+# ⚠️  NÃO use em produção. Apenas para desenvolvimento/testes.
+# -----------------------------------------------------------------------
+
+# =======================================================================
+# BLOCO COMUM (x-airflow-common)
+# -----------------------------------------------------------------------
+# Âncora YAML reutilizada por todos os serviços do Airflow (<<: *airflow-common).
+# Centraliza: imagem base, variáveis de ambiente, volumes e dependências,
+# evitando duplicação de configuração entre os serviços.
+# =======================================================================
+x-airflow-common:
+  &airflow-common
+  # Imagem oficial do Airflow 3.1.8. Pode ser sobrescrita via variável
+  # de ambiente AIRFLOW_IMAGE_NAME no arquivo .env
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.8}
+  # Para usar imagem customizada, comente a linha acima e descomente:
+  # build: .
+  environment:
+    &airflow-common-env
+    # --- Executor ---
+    # CeleryExecutor: distribui tarefas entre workers via fila de mensagens (Redis).
+    # Alternativas: LocalExecutor (single-node), KubernetesExecutor (k8s pods).
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+
+    # --- Autenticação ---
+    # FAB (Flask-AppBuilder) Auth Manager: gerencia login, roles e permissões
+    # na interface web do Airflow.
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+
+    # --- Banco de Metadados ---
+    # String de conexão SQLAlchemy para o PostgreSQL que armazena metadados
+    # do Airflow (DAG runs, task instances, variáveis, connections, etc.).
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+
+    # --- Celery Result Backend ---
+    # Onde o Celery armazena os resultados das tarefas executadas.
+    # Usa o mesmo PostgreSQL dos metadados.
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+
+    # --- Celery Broker ---
+    # URL do Redis que atua como fila de mensagens entre scheduler e workers.
+    # Formato: redis://[:password]@host:port/db_number
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+
+    # --- Fernet Key ---
+    # Chave de criptografia para dados sensíveis (connections, variables).
+    # Vazio aqui = Airflow gera uma automaticamente. Em produção, defina
+    # uma chave fixa com: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    AIRFLOW__CORE__FERNET_KEY: ''
+
+    # --- Comportamento de DAGs ---
+    # true = novas DAGs ficam pausadas ao serem detectadas (segurança).
+    # O operador deve ativá-las manualmente na UI.
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+
+    # --- DAGs de Exemplo ---
+    # true = carrega DAGs de exemplo do Airflow (útil para aprendizado).
+    # Em produção, defina como 'false'.
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+
+    # --- Execution API ---
+    # URL interna do API Server usada pelo scheduler e workers para
+    # comunicação de execução de tarefas (novo no Airflow 3).
+    # Nota: usa porta 8080 INTERNA do container (não a porta do host).
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
+
+    # --- Health Check do Scheduler ---
+    # Habilita endpoint de saúde no scheduler (porta 8974).
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+
+    # --- Arquivo de Configuração ---
+    # Caminho para airflow.cfg customizado montado via volume.
+    ##### AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+
+    # --- Pacotes pip extras ---
+    # Instala pacotes adicionais no startup do container.
+    # Apenas para dev — torna o startup mais lento.
+    # Ex: _PIP_ADDITIONAL_REQUIREMENTS="apache-airflow-providers-snowflake"
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+
+  # --- Volumes Compartilhados ---
+  # Monta diretórios locais dentro dos containers para desenvolvimento.
+  # AIRFLOW_PROJ_DIR padrão = diretório atual (.)
+  volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags        # Arquivos de DAGs Python
+    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs        # Logs de execução das tarefas
+    ##### - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config    # Configurações (airflow.cfg)
+    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins  # Plugins customizados
+
+  # --- Usuário do Container ---
+  # Roda como UID 50000 (ou AIRFLOW_UID do .env), grupo root (0).
+  # Necessário para permissões corretas nos volumes montados.
+  user: "${AIRFLOW_UID:-50000}:0"
+
+  # --- Dependências Comuns ---
+  # Todos os serviços Airflow dependem de Redis e Postgres estarem saudáveis.
+  depends_on:
+    &airflow-common-depends-on
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+
+services:
+
+  # =======================================================================
+  # POSTGRES — Banco de Dados de Metadados
+  # -----------------------------------------------------------------------
+  # PostgreSQL 13 que armazena todos os metadados do Airflow:
+  # - DAG runs e task instances (histórico de execuções)
+  # - Connections (credenciais para sistemas externos)
+  # - Variables (configurações dinâmicas)
+  # - XCom (dados trocados entre tarefas)
+  # - Pools, SLA misses, logs de importação de DAGs, etc.
+  #
+  # O volume nomeado 'postgres-db-volume' garante persistência dos dados
+  # mesmo quando os containers são recriados (docker compose down/up).
+  # =======================================================================
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow       # Usuário do banco
+      POSTGRES_PASSWORD: airflow   # Senha (apenas dev — use secrets em produção)
+      POSTGRES_DB: airflow         # Nome do banco criado automaticamente
+    volumes:
+      # Volume nomeado para persistir dados do PostgreSQL entre restarts
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      # Verifica se o PostgreSQL está aceitando conexões
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s    # Verifica a cada 10 segundos
+      retries: 5       # Falha após 5 tentativas
+      start_period: 5s # Aguarda 5s antes de iniciar verificações
+    restart: always    # Reinicia automaticamente em caso de falha
+
+  # =======================================================================
+  # REDIS — Broker de Mensagens (Celery)
+  # -----------------------------------------------------------------------
+  # Redis 7.2 atua como message broker para o CeleryExecutor:
+  # - O Scheduler enfileira tarefas prontas para execução
+  # - Os Workers consomem tarefas da fila e as executam
+  # - Garante distribuição de carga entre múltiplos workers
+  #
+  # Apenas a porta 6379 é exposta internamente (expose, não ports),
+  # ou seja, não é acessível de fora da rede Docker.
+  # =======================================================================
+  redis:
+    image: redis:7.2-bookworm
+    expose:
+      - 6379  # Porta exposta apenas na rede interna Docker
+    healthcheck:
+      # Verifica se o Redis responde a comandos
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 50       # Mais tentativas pois Redis pode demorar a estabilizar
+      start_period: 30s
+    restart: always
+
+  # =======================================================================
+  # AIRFLOW API SERVER — Interface Web + API REST
+  # -----------------------------------------------------------------------
+  # Novo no Airflow 3 — substitui o antigo Webserver.
+  # Responsável por:
+  # - Servir a interface web (UI) para monitoramento de DAGs e tarefas
+  # - Expor a API REST v2 (endpoints /api/v2/*)
+  # - Receber chamadas de execução via Execution API (usado pelo scheduler)
+  # - Autenticação e autorização de usuários
+  #
+  # Porta do host alterada para 8081 (evita conflito com serviço existente na 8080).
+  # A porta interna do container continua 8080 — health checks e EXECUTION_API_SERVER_URL
+  # não precisam ser alterados pois operam na rede interna Docker.
+  #
+  # Acessível em: http://localhost:8081
+  # Login padrão: airflow / airflow
+  # =======================================================================
+  airflow-apiserver:
+    <<: *airflow-common  # Herda toda configuração do bloco comum
+    command: api-server   # Comando que inicia o API Server
+    ports:
+      - "8090:8080"  # Host:8081 → Container:8080 (8080 do host já em uso)
+    healthcheck:
+      # Verifica se a API está respondendo consultando o endpoint de versão
+      # Usa porta 8080 (interna do container, não a do host)
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s  # Tempo para o servidor inicializar
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on  # Depende de Redis + Postgres
+      airflow-init:
+        # Aguarda a inicialização (migração do banco, criação de usuário) terminar
+        condition: service_completed_successfully
+
+  # =======================================================================
+  # AIRFLOW SCHEDULER — Agendador de Tarefas
+  # -----------------------------------------------------------------------
+  # Componente central do Airflow. Responsável por:
+  # - Monitorar todas as DAGs e suas dependências
+  # - Determinar quais tarefas estão prontas para execução
+  # - Enfileirar tarefas prontas no broker (Redis) para os workers
+  # - Gerenciar retries, timeouts e SLAs
+  #
+  # Health check na porta 8974 (endpoint interno do scheduler).
+  # NÃO tem interface web — apenas processa DAGs em background.
+  # =======================================================================
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      # Endpoint de saúde habilitado via AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # =======================================================================
+  # AIRFLOW DAG PROCESSOR — Processador de DAGs
+  # -----------------------------------------------------------------------
+  # Novo no Airflow 3 — anteriormente embutido no Scheduler.
+  # Responsável por:
+  # - Ler e parsear os arquivos Python da pasta /dags
+  # - Serializar as DAGs e salvar no banco de metadados
+  # - Detectar alterações nos arquivos de DAG (hot reload)
+  # - Validar a estrutura das DAGs (ciclos, dependências inválidas)
+  #
+  # A separação do scheduler melhora performance e estabilidade:
+  # erros de parsing não afetam o agendamento de tarefas.
+  # =======================================================================
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    healthcheck:
+      # Verifica se o job DagProcessorJob está rodando neste host
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # =======================================================================
+  # AIRFLOW WORKER — Executor de Tarefas (Celery)
+  # -----------------------------------------------------------------------
+  # Worker do Celery que efetivamente executa as tarefas:
+  # - Consome mensagens da fila Redis
+  # - Executa os operadores (BashOperator, PythonOperator, etc.)
+  # - Reporta status de volta ao banco de metadados
+  # - Pode ser escalado horizontalmente (múltiplos workers)
+  #
+  # DUMB_INIT_SETSID=0: Necessário para que o sinal de shutdown (SIGTERM)
+  # seja enviado apenas ao processo principal do worker, permitindo que
+  # tarefas em execução terminem graciosamente antes do container parar.
+  #
+  # Depende do API Server estar saudável (além de Redis + Postgres),
+  # pois precisa reportar resultados via Execution API.
+  # =======================================================================
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker  # Inicia o worker Celery
+    healthcheck:
+      # Faz ping no worker Celery para verificar se está responsivo
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+      # Necessário para shutdown correto do worker Celery.
+      # Sem isso, o SIGTERM vai para todo o process group e pode
+      # matar tarefas em andamento abruptamente.
+      DUMB_INIT_SETSID: "0"
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-apiserver:
+        condition: service_healthy  # Worker precisa do API Server ativo
+      airflow-init:
+        condition: service_completed_successfully
+
+  # =======================================================================
+  # AIRFLOW TRIGGERER — Executor de Sensores Assíncronos
+  # -----------------------------------------------------------------------
+  # Gerencia operadores "deferrable" (assíncronos):
+  # - Sensores que aguardam eventos externos (ex: arquivo no S3, query pronta)
+  # - Em vez de ocupar um slot do worker enquanto esperam, eles "deferem"
+  #   a execução para o Triggerer, que usa asyncio para monitorar milhares
+  #   de triggers simultaneamente com mínimo uso de recursos
+  # - Quando a condição é satisfeita, o Triggerer re-enfileira a tarefa
+  #
+  # Sem o Triggerer, sensores deferrable falham. Sensores tradicionais
+  # (mode="poke"/"reschedule") não dependem deste serviço.
+  # =======================================================================
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    healthcheck:
+      # Verifica se o job TriggererJob está ativo neste host
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # =======================================================================
+  # AIRFLOW INIT — Container de Inicialização (roda uma vez e sai)
+  # -----------------------------------------------------------------------
+  # Executa tarefas de setup antes de qualquer outro serviço Airflow:
+  #
+  # 1. Verificação de recursos do sistema:
+  #    - Memória RAM >= 4 GB (mínimo recomendado)
+  #    - CPUs >= 2 (mínimo recomendado)
+  #    - Disco >= 1 GB livre
+  #    Emite warnings se os requisitos não forem atendidos.
+  #
+  # 2. Criação de diretórios:
+  #    - /sources/logs, /sources/dags, /sources/plugins, /sources/config
+  #    Com permissões corretas para o AIRFLOW_UID.
+  #
+  # 3. Migração do banco de dados:
+  #    - _AIRFLOW_DB_MIGRATE=true executa 'airflow db migrate'
+  #    - Cria/atualiza todas as tabelas do banco de metadados
+  #
+  # 4. Criação do usuário admin:
+  #    - _AIRFLOW_WWW_USER_CREATE=true cria o usuário inicial
+  #    - Login: airflow / airflow (configurável via variáveis)
+  #
+  # Roda como root (user: "0:0") para poder criar diretórios e
+  # ajustar permissões. Após completar, os demais serviços iniciam.
+  # =======================================================================
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        # Aviso se AIRFLOW_UID não foi definido no .env
+        if [[ -z "${AIRFLOW_UID}" ]]; then
+          echo ""
+          echo -e "\033[1;33mWARNING!!!: AIRFLOW_UID not set!\e[0m"
+          echo "Para corrigir, execute:  echo -e \"AIRFLOW_UID=$(id -u)\" >> .env"
+          echo ""
+        fi
+        # Coleta métricas do sistema para validação
+        one_meg=1048576
+        mem_available=$$(($$(getconf _PHYS_PAGES) * $$(getconf PAGE_SIZE) / one_meg))
+        cpus_available=$$(grep -cE 'cpu[0-9]+' /proc/stat)
+        disk_available=$$(df / | tail -1 | awk '{print $$4}')
+        warning_resources="false"
+        # Verifica memória (mínimo 4 GB)
+        if (( mem_available < 4000 )) ; then
+          echo ""
+          echo -e "\033[1;33mWARNING!!!: Memória insuficiente para o Airflow.\e[0m"
+          echo "  Disponível: ${mem_available} MB — Mínimo recomendado: 4000 MB"
+          warning_resources="true"
+        fi
+        # Verifica CPUs (mínimo 2)
+        if (( cpus_available < 2 )); then
+          echo ""
+          echo -e "\033[1;33mWARNING!!!: CPUs insuficientes para o Airflow.\e[0m"
+          echo "  Disponível: ${cpus_available} — Mínimo recomendado: 2"
+          warning_resources="true"
+        fi
+        # Verifica disco (mínimo 1 GB)
+        if (( disk_available < one_meg )); then
+          echo ""
+          echo -e "\033[1;33mWARNING!!!: Espaço em disco insuficiente.\e[0m"
+          echo "  Disponível: $$(numfmt --to iec $$((disk_available * 1024))) — Mínimo: 1 GB"
+          warning_resources="true"
+        fi
+        if [[ $${warning_resources} == "true" ]]; then
+          echo ""
+          echo -e "\033[1;33mATENÇÃO: Recursos insuficientes detectados.\e[0m"
+          echo "Veja: https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html"
+          echo ""
+        fi
+        # Cria diretórios necessários e ajusta permissões
+        mkdir -p /sources/logs /sources/dags /sources/plugins /sources/config
+        chown -R "${AIRFLOW_UID}:0" /sources/{logs,dags,plugins,config}
+        # Executa migração do banco e exibe a versão do Airflow
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'            # Executa migração do banco automaticamente
+      _AIRFLOW_WWW_USER_CREATE: 'true'       # Cria usuário admin na primeira execução
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}  # Login do admin
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}  # Senha do admin
+      _PIP_ADDITIONAL_REQUIREMENTS: ''       # Não instala pacotes extras no init
+    user: "0:0"  # Roda como root para criar diretórios e ajustar permissões
+    volumes:
+      # Monta o diretório raiz do projeto para criar a estrutura de pastas
+      - ${AIRFLOW_PROJ_DIR:-.}:/sources
+
+  # =======================================================================
+  # FLOWER — UI de Monitoramento do Celery (opcional)
+  # -----------------------------------------------------------------------
+  # Dashboard web para monitorar o Celery em tempo real:
+  # - Status dos workers (online/offline, tarefas ativas)
+  # - Filas de tarefas (pendentes, em execução, concluídas)
+  # - Gráficos de performance e throughput
+  # - Histórico de tarefas com detalhes de execução
+  #
+  # NÃO inicia por padrão. Para ativar:
+  #   docker compose --profile flower up
+  #
+  # Acessível em: http://localhost:5555
+  # =======================================================================
+  flower:
+    <<: *airflow-common
+    command: celery flower  # Inicia a interface web do Flower
+    profiles:
+      - flower  # Só roda quando o profile "flower" é ativado
+    ports:
+      - "5555:5555"  # Porta do dashboard Flower
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+# =======================================================================
+# VOLUMES NOMEADOS
+# -----------------------------------------------------------------------
+# postgres-db-volume: Armazena os dados do PostgreSQL em um volume
+# Docker gerenciado. Persiste entre docker compose down/up.
+# Para resetar completamente: docker compose down -v
+# =======================================================================
+volumes:
+  postgres-db-volume:
