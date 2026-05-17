@@ -1,0 +1,117 @@
+services:
+  openmetadata-postgres:
+    image: postgres:14-alpine
+    container_name: openmetadata-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: om_user
+      POSTGRES_PASSWORD: om_user_pass
+      POSTGRES_DB: openmetadata_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - openmetadata_postgres_data:/var/lib/postgresql/data
+    networks:
+      - spark-net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "om_user", "-d", "openmetadata_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  om-elasticsearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: om-elasticsearch
+    restart: always
+    environment:
+      discovery.type: single-node
+      OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
+      DISABLE_SECURITY_PLUGIN: "true"
+    ports:
+      - "9201:9200"
+      - "9301:9300"
+    volumes:
+      - openmetadata_es_data:/usr/share/opensearch/data
+    networks:
+      - spark-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE 'green|yellow'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+  openmetadata-migrate:
+    image: openmetadata/server:1.6.6
+    container_name: openmetadata-migrate
+    restart: "no"
+    depends_on:
+      openmetadata-postgres:
+        condition: service_healthy
+    entrypoint: ["./bootstrap/openmetadata-ops.sh", "migrate"]
+    environment:
+      DB_DRIVER_CLASS: org.postgresql.Driver
+      DB_SCHEME: postgresql
+      DB_HOST: openmetadata-postgres
+      DB_PORT: "5432"
+      DB_USER: om_user
+      DB_USER_PASSWORD: om_user_pass
+      OM_DATABASE: openmetadata_db
+      DB_PARAMS: "sslmode=disable"
+      FERNET_KEY: jJgVqL9KpHx8t4YzW2mNcR5sA7bDfG1kU3oX6eQ0vBw=
+    networks:
+      - spark-net
+
+  openmetadata-server:
+    image: openmetadata/server:1.6.6
+    container_name: openmetadata-server
+    restart: always
+    depends_on:
+      openmetadata-postgres:
+        condition: service_healthy
+      om-elasticsearch:
+        condition: service_healthy
+      openmetadata-migrate:
+        condition: service_completed_successfully
+    environment:
+      DB_DRIVER_CLASS: org.postgresql.Driver
+      DB_SCHEME: postgresql
+      DB_HOST: openmetadata-postgres
+      DB_PORT: "5432"
+      DB_USER: om_user
+      DB_USER_PASSWORD: om_user_pass
+      OM_DATABASE: openmetadata_db
+      DB_PARAMS: "sslmode=disable"
+      ELASTICSEARCH_HOST: om-elasticsearch
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_SCHEME: http
+      SEARCH_TYPE: opensearch
+      FERNET_KEY: jJgVqL9KpHx8t4YzW2mNcR5sA7bDfG1kU3oX6eQ0vBw=
+      OPENMETADATA_CLUSTER_NAME: mini-data-lake
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8585"
+      SERVER_ADMIN_PORT: "8586"
+      LOG_LEVEL: INFO
+    ports:
+      - "8585:8585"
+      - "8586:8586"
+    networks:
+      - spark-net
+      - rust-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8586/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+volumes:
+  openmetadata_postgres_data:
+  openmetadata_es_data:
+
+networks:
+  spark-net:
+    external: true
+  rust-net:
+    external: true

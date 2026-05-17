@@ -1,0 +1,33 @@
+services:
+  polaris:
+    image: apache/polaris:latest
+    ports:
+      - "8181:8181"
+      - "8182:8182"
+    environment:
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: rustfs
+      AWS_SECRET_ACCESS_KEY: rustfs123
+      POLARIS_BOOTSTRAP_CREDENTIALS: POLARIS,root,s3cr3t
+      polaris.realm-context.realms: POLARIS
+      quarkus.otel.sdk.disabled: "true"
+      polaris.features.defaults.SUPPORTED_CATALOG_STORAGE_TYPES: "S3,GCS,AZURE,S3_COMPATIBLE"
+      # Desabilita STS para S3 compatível (RustFS/MinIO)
+      POLARIS_FEATURES_DEFAULTS_SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION: "true"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8182/q/health"]
+      interval: 2s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+    networks:
+      - spark-net
+      - rust-net
+
+networks:
+  spark-net:
+    external: true
+  rust-net:
+    external: true
+
+

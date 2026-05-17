@@ -1,0 +1,28 @@
+FROM eclipse-temurin:17-jre-alpine
+
+RUN apk add --no-cache bash wget procps tini python3~=3.12 gcompat
+
+ENV SPARK_VERSION=3.5.8
+ENV SPARK_HOME=/opt/spark
+ENV PATH="${SPARK_HOME}/bin:${SPARK_HOME}/sbin:${PATH}"
+ENV PYSPARK_PYTHON=python3
+ENV ICEBERG_VERSION=1.5.2
+
+# Spark
+RUN wget -q https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+    && tar xf spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+    && mv spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
+    && rm spark-${SPARK_VERSION}-bin-hadoop3.tgz
+
+# JARs Iceberg + Polaris (SDK v2)
+RUN wget -q https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/${ICEBERG_VERSION}/iceberg-spark-runtime-3.5_2.12-${ICEBERG_VERSION}.jar \
+         -O ${SPARK_HOME}/jars/iceberg-spark-runtime-3.5_2.12-${ICEBERG_VERSION}.jar && \
+    wget -q https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar \
+         -O ${SPARK_HOME}/jars/iceberg-aws-bundle-${ICEBERG_VERSION}.jar
+
+# spark-defaults.conf
+RUN rm -rf ${SPARK_HOME}/conf/spark-defaults.conf && \
+    touch ${SPARK_HOME}/conf/spark-defaults.conf
+
+WORKDIR ${SPARK_HOME}
+ENTRYPOINT ["tini", "--"]

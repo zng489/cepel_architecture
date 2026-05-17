@@ -1,0 +1,45 @@
+services:
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    hostname: rustfs
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # API S3
+      - "9001:9001"   # Console web
+    environment:
+      - RUSTFS_ACCESS_KEY=rustfs
+      - RUSTFS_SECRET_KEY=rustfs123
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ADDRESS=0.0.0.0:9001
+      - RUSTFS_VOLUMES=/data
+    volumes:
+      - rustfs-data:/data
+    networks:
+      rust-net:
+        ipv4_address: 192.168.100.10
+
+  s3browser:
+    image: cloudlena/s3manager
+    container_name: s3browser
+    restart: on-failure
+    environment:
+      - ENDPOINT=192.168.100.10:9000
+      - ACCESS_KEY_ID=rustfs
+      - SECRET_ACCESS_KEY=rustfs123
+      - USE_SSL=false
+      - PATH_STYLE=true
+    ports:
+      - "9090:8080"
+    networks:
+      - rust-net
+    depends_on:
+      - rustfs
+
+networks:
+  rust-net:
+    external: true
+
+volumes:
+  rustfs-data:

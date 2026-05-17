@@ -1,0 +1,63 @@
+FROM python:3.12-slim-bookworm
+
+# ── System dependencies ────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget tini procps default-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Java ───────────────────────────────────────────────────────────────────────
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+# ── Spark ──────────────────────────────────────────────────────────────────────
+ENV SPARK_VERSION=3.5.8
+ENV SPARK_HOME=/opt/spark
+ENV PATH="${SPARK_HOME}/bin:${PATH}"
+
+RUN wget -q https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+    && tar xf spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+    && mv spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
+    && rm spark-${SPARK_VERSION}-bin-hadoop3.tgz
+
+# ── Python packages ────────────────────────────────────────────────────────────
+RUN pip install --no-cache-dir \
+    jupyterlab \
+    pyspark==${SPARK_VERSION} \
+    delta-spark==3.2.1 \
+    pandas \
+    matplotlib
+
+# ── JARs: Iceberg + Polaris (SDK v2) ──────────────────────────────────────────
+ENV JARS_DIR=${SPARK_HOME}/jars
+ENV ICEBERG_VERSION=1.5.2
+
+RUN mkdir -p ${JARS_DIR} && \
+    wget -q https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/${ICEBERG_VERSION}/iceberg-spark-runtime-3.5_2.12-${ICEBERG_VERSION}.jar \
+         -O ${JARS_DIR}/iceberg-spark-runtime-3.5_2.12-${ICEBERG_VERSION}.jar && \
+    wget -q https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar \
+         -O ${JARS_DIR}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar
+
+# ── spark-defaults.conf ────────────────────────────────────────────────────────
+RUN rm -rf ${SPARK_HOME}/conf/spark-defaults.conf && \
+    touch ${SPARK_HOME}/conf/spark-defaults.conf
+
+# ── Non-root user ──────────────────────────────────────────────────────────────
+RUN useradd -m -s /bin/bash jovyan && \
+    chown jovyan:jovyan ${SPARK_HOME}/conf/spark-defaults.conf
+
+USER jovyan
+
+WORKDIR /home/jovyan
+
+# ── Entrypoint ─────────────────────────────────────────────────────────────────
+ENTRYPOINT ["tini", "--"]
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--NotebookApp.token=spark123"]
+
+# hadoop-client-api e hadoop-client-runtime já estão embutidos no Spark 3.5.x. 
+# Adicionar JARs duplicados causa conflito de versão em runtime.
+
+
+
+
+# hadoop-client-api e hadoop-client-runtime já estão embutidos no Spark 3.5.x. 
+# Adicionar JARs duplicados causa conflito de versão em runtime.

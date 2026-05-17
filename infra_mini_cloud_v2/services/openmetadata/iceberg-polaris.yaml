@@ -1,0 +1,24 @@
+source:
+  type: iceberg
+  serviceName: Iceberg
+  serviceConnection:
+    config:
+      type: Iceberg
+      catalog:
+        name: poc_catalog
+        warehouseLocation: "poc_catalog"  # ajuste pro seu path real
+        connection:
+          uri: "http://polaris:8181/api/catalog"
+          token: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwb2xhcmlzIiwic3ViIjoicm9vdCIsImlhdCI6MTc3OTAyNjczOCwiZXhwIjoxNzc5MDMwMzM4LCJqdGkiOiI0NzU1YzUzOC0yNWU2LTRjZGMtODNkNS0wZGM3NGJkNGFhNzMiLCJhY3RpdmUiOnRydWUsImNsaWVudF9pZCI6InJvb3QiLCJwcmluY2lwYWxJZCI6MSwic2NvcGUiOiJQUklOQ0lQQUxfUk9MRTpBTEwifQ.pnwsdzvzEB-gJZA1wSo6piratwvhL-muld6zyZHyVGlgJw_ax-BAcjpULW3t4QCXXixfRLzQTI30EteoQHca3Y7HGo5vwaticSArxtA-ClS3UTRrVh_82SxMpvRV9VVy79AEGdDfOh_5CLvxAWouTLBG6FXNA1Y1XFbIQX3xD2pxPhqalFOOKbdfTk7RQGFDzWhfGpWlz4_sxDnz0cGFp1eOEnif1R_bKLKKLpbfjdRklkn7e-hDIwe1n0vyIaTWfUmIDeZcR_oz5ttgeJqm8-3C1k4ViyuwBNtJ4QUoHcGMtex1wFxMrlKOxI4CllsKNZFQn5pDDZlIimPEiEhjyA"
+  sourceConfig:
+    config:
+      type: DatabaseMetadata
+sink:
+  type: metadata-rest
+  config: {}
+workflowConfig:
+  openMetadataServerConfig:
+    hostPort: "http://openmetadata-server:8585/api"
+    authProvider: openmetadata
+    securityConfig:
+      jwtToken: "eyJraWQiOiJHYjM4OWEtOWY3Ni1nZGpzLWE5MmotMDI0MmJrOTQzNTYiLCJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJvcGVuLW1ldGFkYXRhLm9yZyIsInN1YiI6ImluZ2VzdGlvbi1ib3QiLCJyb2xlcyI6WyJJbmdlc3Rpb25Cb3RSb2xlIl0sImVtYWlsIjoiaW5nZXN0aW9uLWJvdEBvcGVuLW1ldGFkYXRhLm9yZyIsImlzQm90Ijp0cnVlLCJ0b2tlblR5cGUiOiJCT1QiLCJpYXQiOjE3NzkwMjYyNzAsImV4cCI6bnVsbH0.imADYFGkfOERivlxG2qGZ2edvKakMrI2SJ8TbHcaixYWJXyMDE6sVds9Ixzttp6n5G78uKZpdgp60RR4Q2jgxFrFBga1W7pksCa_LUkujC4aPeSvUf1whtvxwNJHhNpb3qEWkMVwRAyTn0Jn3-i3VulUD3aHKNr3gi7CUI2ojoohh28cFs5TZS687Ulbp6et1fHBJJVwv5r9weoOfmPO6Xc79hztXJe5AdVa5zfAxjn6-zCTuegNylt8lqViCFryMJC0S5p_UZdE8iEw7N2PBtNlBE29ZXUUQs7oHKj_6qnsxE0JG7pC8yOhiQerv06m7v2LUQZDVDgEQE87kUHM1w"

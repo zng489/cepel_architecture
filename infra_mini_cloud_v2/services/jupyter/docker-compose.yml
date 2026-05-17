@@ -1,0 +1,39 @@
+#version: "3.9"
+services:
+  jupyter:
+    image: jupyter:dev
+    container_name: jupyter
+    user: "0:0"
+    command:
+      - "tini"
+      - "--"
+      - "jupyter"
+      - "lab"
+      - "--ip=0.0.0.0"
+      - "--port=8888"
+      - "--no-browser"
+      - "--allow-root"
+      - "--NotebookApp.token=spark123"
+    environment: []
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./work:/home/jovyan/work
+      - ./data:/home/jovyan/data
+      - ../spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    depends_on:
+      - spark-master
+      #- hdfs-namenode
+    networks:
+      - spark-net
+      - rust-net
+
+networks:
+  spark-net:
+    external: true
+  rust-net:
+    external: true
+
+volumes:
+  spark-shared:
+  shared-data:

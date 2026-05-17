@@ -1,0 +1,61 @@
+services:
+
+  openmetadata-postgres:
+    extends:
+      file: ./services/openmetadata/docker-compose.yml
+      service: openmetadata-postgres
+
+  om-elasticsearch:
+    extends:
+      file: ./services/openmetadata/docker-compose.yml
+      service: om-elasticsearch
+
+  openmetadata-migrate:
+    extends:
+      file: ./services/openmetadata/docker-compose.yml
+      service: openmetadata-migrate
+
+  openmetadata-server:
+    extends:
+      file: ./services/openmetadata/docker-compose.yml
+      service: openmetadata-server
+
+  spark-master:
+    extends:
+      file: ./services/spark/docker-compose.yml
+      service: spark-master
+
+  spark-worker-1:
+    extends:
+      file: ./services/spark/docker-compose.yml
+      service: spark-worker-1
+
+  spark-worker-2:
+    extends:
+      file: ./services/spark/docker-compose.yml
+      service: spark-worker-2
+
+  jupyter:
+    extends:
+      file: ./services/jupyter/docker-compose.yml
+      service: jupyter
+
+  polaris:
+    extends:
+      file: ./services/polaris/docker-compose.yml
+      service: polaris
+    networks:
+      - spark-net
+      - rust-net
+
+networks:
+  spark-net:
+    name: spark-net
+    driver: bridge
+  rust-net:
+    external: true
+    name: rust-net
+
+volumes:
+  openmetadata_postgres_data:
+  openmetadata_es_data:
