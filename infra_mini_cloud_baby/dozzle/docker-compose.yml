@@ -1,0 +1,22 @@
+#version: "3.8"
+
+services:
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dozzle_data:/data
+    ports:
+      - "9999:8080"
+    environment: {}
+      # Ative as opções desejadas removendo o comentário e mantendo o formato chave: valor
+      # Habilitar ações nos containers (stop, start, restart)
+      # DOZZLE_ENABLE_ACTIONS: "true"
+      # Permitir acesso a shells dos containers
+      # DOZZLE_ENABLE_SHELL: "true"
+      # Habilitar autenticação simples
+      # DOZZLE_AUTH_PROVIDER: "simple"
+
+volumes:
+  dozzle_data:

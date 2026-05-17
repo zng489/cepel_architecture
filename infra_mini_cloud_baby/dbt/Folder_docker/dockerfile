@@ -1,0 +1,41 @@
+FROM python:3.12-slim
+
+ARG DBT_CORE_VERSION=1.8.0
+ARG DBT_ADAPTER=dbt-spark
+ARG DBT_ADAPTER_VERSION=1.8.0
+
+ENV DBT_PROFILES_DIR=/dbt \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Install system dependencies + Java (fixed)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    default-jdk \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set JAVA_HOME correctly for default JDK
+ENV JAVA_HOME=/usr/lib/jvm/default-java
+
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install \
+        pyspark \
+        dbt-core==${DBT_CORE_VERSION} \
+        ${DBT_ADAPTER}==${DBT_ADAPTER_VERSION}
+
+# Set working directory
+WORKDIR /dbt
+
+# Copy project files
+COPY . /dbt
+
+# Default entrypoint
+ENTRYPOINT ["dbt"]
+CMD ["--help"]
+
+
+docker run --rm \
+  -v $(pwd):/dbt \
+  my-dbt-spark dbt <command>

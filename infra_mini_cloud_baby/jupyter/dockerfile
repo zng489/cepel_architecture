@@ -1,0 +1,36 @@
+FROM python:3.12-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget tini procps default-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+ENV SPARK_VERSION=3.5.8
+ENV SPARK_HOME=/opt/spark
+ENV PATH="${SPARK_HOME}/bin:${PATH}"
+
+# Spark
+RUN wget https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+    && tar xf spark-${SPARK_VERSION}-bin-hadoop3.tgz \
+    && mv spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
+    && rm spark-${SPARK_VERSION}-bin-hadoop3.tgz
+
+# Python packages
+RUN pip install --no-cache-dir \
+    jupyterlab pyspark==${SPARK_VERSION} delta-spark==3.2.1 pandas matplotlib
+
+# JARs S3A — MESMAS versões
+RUN mkdir -p ${SPARK_HOME}/jars && \
+    wget -q https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
+         -O ${SPARK_HOME}/jars/hadoop-aws-3.3.4.jar && \
+    wget -q https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
+         -O ${SPARK_HOME}/jars/aws-java-sdk-bundle-1.12.262.jar
+
+RUN useradd -m -s /bin/bash jovyan
+USER jovyan
+
+WORKDIR /home/jovyan
+ENTRYPOINT ["tini", "--"]
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--NotebookApp.token=spark123"]

@@ -1,0 +1,88 @@
+FROM eclipse-temurin:17-jre-jammy
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash wget procps tini \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV HADOOP_VERSION=3.3.4
+ENV HADOOP_HOME=/opt/hadoop
+ENV PATH="${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin:${PATH}"
+ENV HDFS_NAMENODE_USER=root
+ENV HDFS_DATANODE_USER=root
+
+# Hadoop
+RUN set -eux; \
+    curl --progress-bar -L --connect-timeout 30 --retry 5 --retry-delay 5 \
+         -o /tmp/hadoop.tar.gz \
+         "https://mirrors.huaweicloud.com/apache/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" \
+    && tar -xzf /tmp/hadoop.tar.gz -C /opt \
+    && mv /opt/hadoop-${HADOOP_VERSION} ${HADOOP_HOME} \
+    && rm /tmp/hadoop.tar.gz \
+    && rm -rf ${HADOOP_HOME}/share/doc
+    
+# JAVA_HOME no hadoop-env.sh
+RUN printf 'export JAVA_HOME=${JAVA_HOME}\nexport HADOOP_OPTS="${HADOOP_OPTS} -Djava.library.path="\nexport HADOOP_NAMENODE_OPTS="${HADOOP_NAMENODE_OPTS} --add-opens java.base/java.lang=ALL-UNNAMED"\nexport HADOOP_DATANODE_OPTS="${HADOOP_DATANODE_OPTS} --add-opens java.base/java.lang=ALL-UNNAMED"\n' \
+    >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
+
+# core-site.xml
+RUN printf '<?xml version="1.0"?>\n\
+<configuration>\n\
+  <property>\n\
+    <name>fs.defaultFS</name>\n\
+    <value>hdfs://hdfs-namenode:8020</value>\n\
+  </property>\n\
+  <property>\n\
+    <name>fs.s3a.endpoint</name>\n\
+    <value>http://minio:9000</value>\n\
+  </property>\n\
+  <property>\n\
+    <name>fs.s3a.access.key</name>\n\
+    <value>testuser</value>\n\
+  </property>\n\
+  <property>\n\
+    <name>fs.s3a.secret.key</name>\n\
+    <value>password</value>\n\
+  </property>\n\
+  <property>\n\
+    <name>fs.s3a.path.style.access</name>\n\
+    <value>true</value>\n\
+  </property>\n\
+  <property>\n\
+    <name>fs.s3a.impl</name>\n\
+    <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>\n\
+  </property>\n\
+</configuration>\n' > ${HADOOP_HOME}/etc/hadoop/core-site.xml
+
+# hdfs-site.xml
+RUN printf '<?xml version="1.0"?>\n\
+<configuration>\n\
+  <property>\n\
+    <name>dfs.permissions.enabled</name>\n\
+    <value>false</value>\n\
+  </property>\n\
+  <property>\n\
+    <name>dfs.datanode.hostname</name>\n\
+    <value>hdfs-datanode</value>\n\
+  </property>\n\
+  <property>\n\
+    <name>dfs.client.use.datanode.hostname</name>\n\
+    <value>true</value>\n\
+  </property>\n\
+  <property>\n\
+    <name>dfs.webhdfs.enabled</name>\n\
+    <value>true</value>\n\
+  </property>\n\
+  <property>\n\
+    <name>dfs.namenode.http-address</name>\n\
+    <value>0.0.0.0:9870</value>\n\
+  </property>\n\
+</configuration>\n' > ${HADOOP_HOME}/etc/hadoop/hdfs-site.xml
+
+# JARs S3A — MESMAS versões
+RUN wget -q https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
+         -O ${HADOOP_HOME}/share/hadoop/tools/lib/hadoop-aws-3.3.4.jar && \
+    wget -q https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
+         -O ${HADOOP_HOME}/share/hadoop/tools/lib/aws-java-sdk-bundle-1.12.262.jar
+
+WORKDIR ${HADOOP_HOME}
+ENTRYPOINT ["tini", "--"]
